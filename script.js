@@ -1,6 +1,287 @@
 // ============================================
-// ZAIN LIVE - VOICE ROOM UI LOGIC
+// ZAIN LIVE - VOICE ROOM WITH WEBSOCKET
 // ============================================
+
+// ============================================
+// WEBSOCKET CONFIGURATION
+// ============================================
+
+const WebSocketConfig = {
+    // Change to your actual WebSocket server URL
+    // Local: 'ws://localhost:8080'
+    // Production: 'wss://your-domain.com/ws'
+    url: 'ws://localhost:8080',
+    reconnectAttempts: 5,
+    reconnectDelay: 3000,
+    messageTimeout: 30000,
+    pingInterval: 30000,
+};
+
+// ============================================
+// WEBSOCKET CONNECTION MANAGER
+// ============================================
+
+class WebSocketManager {
+    constructor(config) {
+        this.config = config;
+        this.ws = null;
+        this.reconnectAttempts = 0;
+        this.isConnected = false;
+        this.messageQueue = [];
+        this.listeners = new Map();
+        this.pingTimer = null;
+        this.messageHandlers = {};
+        this.userId = this.generateUserId();
+        this.username = `User${this.userId.substring(0, 5)}`;
+        this.userAvatar = Math.floor(Math.random() * 70);
+    }
+
+    /**
+     * Initialize WebSocket connection
+     */
+    connect() {
+        try {
+            console.log(`🔌 Connecting to WebSocket: ${this.config.url}`);
+            this.ws = new WebSocket(this.config.url);
+
+            this.ws.onopen = () => this.onOpen();
+            this.ws.onmessage = (event) => this.onMessage(event);
+            this.ws.onerror = (error) => this.onError(error);
+            this.ws.onclose = () => this.onClose();
+        } catch (error) {
+            console.error('❌ WebSocket connection error:', error);
+            this.updateConnectionStatus('error', 'Connection Failed');
+            this.attemptReconnect();
+        }
+    }
+
+    /**
+     * Handle successful connection
+     */
+    onOpen() {
+        console.log('✅ WebSocket connected');
+        this.isConnected = true;
+        this.reconnectAttempts = 0;
+        this.updateConnectionStatus('connected', 'Connected');
+        
+        // Send user info to server
+        this.send('user:join', {
+            userId: this.userId,
+            username: this.username,
+            userAvatar: this.userAvatar,
+            roomId: 'tech-talk-room',
+        });
+
+        // Flush message queue
+        this.flushMessageQueue();
+
+        // Start ping to keep connection alive
+        this.startPing();
+
+        // Emit custom event
+        this.emit('connected');
+    }
+
+    /**
+     * Handle incoming messages
+     */
+    onMessage(event) {
+        try {
+            const data = JSON.parse(event.data);
+            this.handleMessage(data);
+        } catch (error) {
+            console.error('❌ Message parse error:', error);
+        }
+    }
+
+    /**
+     * Handle message routing
+     */
+    handleMessage(data) {
+        const { type, payload } = data;
+        
+        console.log(`📨 Received: ${type}`, payload);
+
+        // Emit type-specific event
+        this.emit(type, payload);
+
+        // Call registered handler if exists
+        if (this.messageHandlers[type]) {
+            this.messageHandlers[type](payload);
+        }
+
+        // Also emit generic message event
+        this.emit('message', data);
+    }
+
+    /**
+     * Handle connection errors
+     */
+    onError(error) {
+        console.error('❌ WebSocket error:', error);
+        this.updateConnectionStatus('error', 'Connection Error');
+    }
+
+    /**
+     * Handle connection close
+     */
+    onClose() {
+        console.log('🔌 WebSocket disconnected');
+        this.isConnected = false;
+        this.stopPing();
+        this.updateConnectionStatus('disconnected', 'Disconnected');
+        this.attemptReconnect();
+    }
+
+    /**
+     * Send message to server
+     */
+    send(type, payload = {}) {
+        const message = {
+            type,
+            payload,
+            timestamp: Date.now(),
+        };
+
+        if (this.isConnected && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(message));
+            console.log(`📤 Sent: ${type}`, payload);
+        } else {
+            console.warn(`⚠️ WebSocket not ready, queueing message: ${type}`);
+            this.messageQueue.push(message);
+            this.updateConnectionStatus('connecting', 'Reconnecting...');
+        }
+    }
+
+    /**
+     * Flush queued messages
+     */
+    flushMessageQueue() {
+        while (this.messageQueue.length > 0) {
+            const message = this.messageQueue.shift();
+            this.ws.send(JSON.stringify(message));
+            console.log(`📤 Flushed: ${message.type}`);
+        }
+    }
+
+    /**
+     * Register message handler
+     */
+    on(type, callback) {
+        this.messageHandlers[type] = callback;
+    }
+
+    /**
+     * Emit custom events
+     */
+    emit(eventName, data) {
+        const event = new CustomEvent(`ws:${eventName}`, { detail: data });
+        document.dispatchEvent(event);
+    }
+
+    /**
+     * Keep connection alive with ping
+     */
+    startPing() {
+        this.pingTimer = setInterval(() => {
+            this.send('ping', { userId: this.userId });
+        }, this.config.pingInterval);
+    }
+
+    stopPing() {
+        if (this.pingTimer) {
+            clearInterval(this.pingTimer);
+            this.pingTimer = null;
+        }
+    }
+
+    /**
+     * Attempt to reconnect
+     */
+    attemptReconnect() {
+        if (this.reconnectAttempts < this.config.reconnectAttempts) {
+            this.reconnectAttempts++;
+            const delay = this.config.reconnectDelay * this.reconnectAttempts;
+            console.log(`🔄 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
+            
+            setTimeout(() => {
+                this.updateConnectionStatus('connecting', 'Reconnecting...');
+                this.connect();
+            }, delay);
+        } else {
+            console.error('❌ Max reconnection attempts reached');
+            this.updateConnectionStatus('error', 'Connection Lost');
+        }
+    }
+
+    /**
+     * Update UI connection status
+     */
+    updateConnectionStatus(state, text) {
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const chatStatus = document.getElementById('chatStatus');
+        const chatConnectionStatus = document.getElementById('chatConnectionStatus');
+
+        if (statusIndicator) {
+            statusIndicator.className = `status-indicator ${state}`;
+        }
+        if (statusText) {
+            statusText.textContent = text;
+        }
+
+        // Update chat status
+        if (chatStatus) {
+            const icon = state === 'connected' ? 'fa-circle' : 'fa-circle-notch';
+            const cssClass = state === 'connected' ? '' : 'reconnecting';
+            chatStatus.innerHTML = `<i class="fas ${icon} ${cssClass}"></i> ${state === 'connected' ? 'Live' : 'Reconnecting'}`;
+        }
+
+        // Show reconnection warning
+        if (chatConnectionStatus) {
+            chatConnectionStatus.style.display = state !== 'connected' ? 'flex' : 'none';
+        }
+
+        // Debug log
+        this.debugLog(`Status: ${state} - ${text}`);
+    }
+
+    /**
+     * Generate unique user ID
+     */
+    generateUserId() {
+        return `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    /**
+     * Debug console logging
+     */
+    debugLog(message) {
+        const debugOutput = document.getElementById('debugOutput');
+        if (debugOutput) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'debug-entry';
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            debugOutput.insertBefore(logEntry, debugOutput.firstChild);
+            
+            // Keep only last 20 entries
+            while (debugOutput.children.length > 20) {
+                debugOutput.removeChild(debugOutput.lastChild);
+            }
+        }
+    }
+
+    /**
+     * Close connection gracefully
+     */
+    disconnect() {
+        this.stopPing();
+        if (this.ws) {
+            this.ws.close();
+        }
+    }
+}
 
 // ============================================
 // STATE MANAGEMENT
@@ -15,6 +296,12 @@ const AppState = {
     lastGift: '💎',
     unreadMessages: 3,
 };
+
+// ============================================
+// GLOBAL WEBSOCKET INSTANCE
+// ============================================
+
+let ws = null;
 
 // ============================================
 // DOM ELEMENTS
@@ -49,10 +336,17 @@ const Elements = {
     giftCount: document.getElementById('giftCount'),
     lastGiftDisplay: document.getElementById('lastGift'),
     
+    // Connection Status
+    statusIndicator: document.getElementById('statusIndicator'),
+    statusText: document.getElementById('statusText'),
+    chatStatus: document.getElementById('chatStatus'),
+    
     // Other
     chatBadge: document.getElementById('chatBadge'),
     toastContainer: document.getElementById('toastContainer'),
     listenersGrid: document.getElementById('listenersGrid'),
+    debugToggle: document.getElementById('debugToggle'),
+    debugConsole: document.getElementById('debugConsole'),
 };
 
 // ============================================
@@ -60,10 +354,165 @@ const Elements = {
 // ============================================
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize WebSocket
+    ws = new WebSocketManager(WebSocketConfig);
+    ws.connect();
+
+    // Setup event listeners
     initializeEventListeners();
+    setupWebSocketHandlers();
+    setupCustomEventListeners();
+    
     generateListenerAvatars();
     updateUI();
+
+    // Enable debug console in development (disable in production)
+    setupDebugConsole();
+
+    console.log('✅ Zain Live Voice Room initialized with WebSocket');
 });
+
+// ============================================
+// WEBSOCKET MESSAGE HANDLERS
+// ============================================
+
+function setupWebSocketHandlers() {
+    // Listen for chat messages
+    ws.on('chat:message', (payload) => {
+        addRemoteMessage(payload);
+    });
+
+    // Listen for hand raise events
+    ws.on('action:handRaise', (payload) => {
+        handleRemoteHandRaise(payload);
+    });
+
+    // Listen for gift events
+    ws.on('action:gift', (payload) => {
+        handleRemoteGift(payload);
+    });
+
+    // Listen for user status changes
+    ws.on('user:statusChange', (payload) => {
+        handleUserStatusChange(payload);
+    });
+
+    // Listen for listener count updates
+    ws.on('room:listenerUpdate', (payload) => {
+        updateListenerCount(payload);
+    });
+
+    // Listen for microphone state changes from other users
+    ws.on('user:micToggle', (payload) => {
+        handleRemoteMicToggle(payload);
+    });
+
+    // Connection events
+    document.addEventListener('ws:connected', () => {
+        console.log('🎉 WebSocket connection established');
+        showToast('Connected to room', 'success');
+    });
+
+    document.addEventListener('ws:message', (e) => {
+        ws.debugLog(`Message received: ${e.detail.type}`);
+    });
+}
+
+// ============================================
+// CUSTOM EVENT LISTENERS
+// ============================================
+
+function setupCustomEventListeners() {
+    // Listen for pong response
+    ws.on('pong', (payload) => {
+        console.log('💓 Pong received - connection active');
+    });
+
+    // Listen for room announcements
+    ws.on('room:announcement', (payload) => {
+        showToast(payload.message, 'info');
+    });
+
+    // Listen for error messages
+    ws.on('error', (payload) => {
+        console.error('🔴 Server error:', payload);
+        showToast(payload.message || 'An error occurred', 'error');
+    });
+}
+
+// ============================================
+// REMOTE MESSAGE HANDLERS
+// ============================================
+
+function addRemoteMessage(data) {
+    const { userId, username, userAvatar, text, timestamp } = data;
+    
+    if (!AppState.chatOpen) {
+        AppState.unreadMessages++;
+        updateChatBadge();
+    }
+
+    const messageGroup = document.createElement('div');
+    messageGroup.className = 'message-group';
+    messageGroup.innerHTML = `
+        <div class="message-item">
+            <img src="https://i.pravatar.cc/150?img=${userAvatar}" alt="${username}" class="message-avatar">
+            <div class="message-content">
+                <span class="message-author">${escapeHtml(username)}</span>
+                <p class="message-text">${escapeHtml(text)}</p>
+                <span class="message-time">${formatTime(timestamp)}</span>
+            </div>
+        </div>
+    `;
+
+    Elements.chatMessages.appendChild(messageGroup);
+    Elements.chatMessages.scrollTop = Elements.chatMessages.scrollHeight;
+
+    console.log(`💬 Message from ${username}: ${text}`);
+}
+
+function handleRemoteHandRaise(data) {
+    const { userId, username } = data;
+    AppState.handRaisedCount++;
+    Elements.handRaisedCount.textContent = AppState.handRaisedCount;
+    Elements.handRaisedIndicator.style.display = 'flex';
+    showToast(`${username} raised their hand!`, 'info');
+}
+
+function handleRemoteGift(data) {
+    const { userId, username, emoji } = data;
+    AppState.giftCount++;
+    AppState.lastGift = emoji;
+
+    Elements.lastGiftDisplay.textContent = emoji;
+    Elements.giftCount.textContent = AppState.giftCount;
+    Elements.giftIndicator.style.display = 'flex';
+
+    createFloatingGift(emoji);
+    showToast(`${username} sent ${emoji}!`, 'success');
+}
+
+function handleUserStatusChange(data) {
+    const { userId, username, status } = data;
+    console.log(`👤 ${username} is now ${status}`);
+}
+
+function handleRemoteMicToggle(data) {
+    const { userId, username, micOn } = data;
+    console.log(`🎤 ${username} turned mic ${micOn ? 'ON' : 'OFF'}`);
+}
+
+function updateListenerCount(data) {
+    const { count } = data;
+    const listenerCountEl = document.getElementById('listenerCount');
+    if (listenerCountEl) {
+        listenerCountEl.textContent = formatNumber(count);
+    }
+}
+
+// ============================================
+// EVENT LISTENERS
+// ============================================
 
 function initializeEventListeners() {
     // Bottom Navigation
@@ -97,6 +546,11 @@ function initializeEventListeners() {
     
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts);
+
+    // Debug toggle
+    if (Elements.debugToggle) {
+        Elements.debugToggle.addEventListener('click', toggleDebugConsole);
+    }
 }
 
 // ============================================
@@ -107,8 +561,12 @@ function toggleMicrophone() {
     AppState.isMicOn = !AppState.isMicOn;
     Elements.micBtn.classList.toggle('active');
     
-    // Add visual feedback with animation
-    const ripple = createRipple(Elements.micBtn);
+    createRipple(Elements.micBtn);
+
+    // Send to server
+    ws.send('action:micToggle', {
+        micOn: AppState.isMicOn,
+    });
     
     if (AppState.isMicOn) {
         showToast('Microphone enabled', 'success');
@@ -127,18 +585,16 @@ function toggleHandRaise() {
     AppState.isHandRaised = !AppState.isHandRaised;
     Elements.handBtn.classList.toggle('active');
     
+    // Send to server
+    ws.send('action:handRaise', {
+        raised: AppState.isHandRaised,
+    });
+
     if (AppState.isHandRaised) {
         AppState.handRaisedCount++;
         Elements.handRaisedCount.textContent = AppState.handRaisedCount;
         Elements.handRaisedIndicator.style.display = 'flex';
         showToast('Hand raised! Waiting for host approval', 'info');
-        
-        // Simulate host approval after 3 seconds
-        setTimeout(() => {
-            if (AppState.isHandRaised) {
-                showToast('You\'ve been invited to speak!', 'success');
-            }
-        }, 3000);
     } else {
         showToast('Hand lowered', 'info');
     }
@@ -157,7 +613,6 @@ function toggleChat() {
     
     if (AppState.chatOpen) {
         Elements.chatInput.focus();
-        // Clear unread badge when chat is opened
         AppState.unreadMessages = 0;
         updateChatBadge();
     }
@@ -172,14 +627,26 @@ function closeChat() {
 function sendMessage() {
     const message = Elements.chatInput.value.trim();
     
-    if (!message) return;
+    if (!message || !ws.isConnected) {
+        if (!ws.isConnected) {
+            showToast('Not connected to room', 'error');
+        }
+        return;
+    }
     
-    // Create message element
+    // Send message via WebSocket
+    ws.send('chat:message', {
+        text: message,
+        username: ws.username,
+        userAvatar: ws.userAvatar,
+    });
+
+    // Add to local chat immediately for better UX
     const messageGroup = document.createElement('div');
     messageGroup.className = 'message-group';
     messageGroup.innerHTML = `
         <div class="message-item">
-            <img src="https://i.pravatar.cc/150?img=100" alt="You" class="message-avatar">
+            <img src="https://i.pravatar.cc/150?img=${ws.userAvatar}" alt="You" class="message-avatar">
             <div class="message-content">
                 <span class="message-author">You</span>
                 <p class="message-text">${escapeHtml(message)}</p>
@@ -188,14 +655,12 @@ function sendMessage() {
         </div>
     `;
     
-    // Add message to chat
     Elements.chatMessages.appendChild(messageGroup);
     Elements.chatMessages.scrollTop = Elements.chatMessages.scrollHeight;
     
-    // Clear input
     Elements.chatInput.value = '';
     
-    showToast('Message sent!', 'success');
+    console.log('📤 Message sent:', message);
 }
 
 function updateChatBadge() {
@@ -223,18 +688,21 @@ function sendGift(emoji) {
     AppState.giftCount++;
     AppState.lastGift = emoji;
     
-    // Update display
+    // Send via WebSocket
+    ws.send('action:gift', {
+        emoji: emoji,
+        username: ws.username,
+        userAvatar: ws.userAvatar,
+    });
+
     Elements.lastGiftDisplay.textContent = emoji;
     Elements.giftCount.textContent = AppState.giftCount;
     Elements.giftIndicator.style.display = 'flex';
     
-    // Create floating animation
     createFloatingGift(emoji);
-    
     closeGiftPopup();
     showToast(`Sent ${emoji} gift!`, 'success');
     
-    // Trigger animation on indicator
     Elements.giftIndicator.style.animation = 'none';
     setTimeout(() => {
         Elements.giftIndicator.style.animation = '';
@@ -256,7 +724,6 @@ function createFloatingGift(emoji) {
     
     document.body.appendChild(gift);
     
-    // Animate floating up
     let top = window.innerHeight;
     let opacity = 1;
     const animation = setInterval(() => {
@@ -281,12 +748,18 @@ function leaveRoom() {
     
     if (confirmed) {
         showToast('Leaving room...', 'info');
-        
+
+        // Send leave event to server
+        ws.send('user:leave', {
+            username: ws.username,
+        });
+
+        // Disconnect WebSocket
         setTimeout(() => {
-            // Simulate navigation
-            console.log('User left the room');
+            ws.disconnect();
             showToast('Left room', 'success');
-        }, 1000);
+            console.log('🚪 User left the room');
+        }, 500);
     }
 }
 
@@ -295,11 +768,15 @@ function leaveRoom() {
 // ============================================
 
 function showMoreOptions() {
-    const options = ['Share Room', 'Report', 'Block', 'Settings', 'Cancel'];
-    const selected = confirm(`${options.slice(0, -1).join('\n')}\n\nSelect an option`);
+    const options = ['Share Room', 'Report', 'Block', 'Settings'];
+    const choice = prompt(`${options.join('\n')}\n\nEnter number (1-${options.length})`);
     
-    if (selected) {
-        showToast('Option selected', 'info');
+    if (choice && choice >= 1 && choice <= options.length) {
+        const selected = options[choice - 1];
+        ws.send('user:action', {
+            action: selected,
+        });
+        showToast(`${selected} selected`, 'info');
     }
 }
 
@@ -378,7 +855,6 @@ function showToast(message, type = 'info') {
     
     Elements.toastContainer.appendChild(toast);
     
-    // Auto remove after 3 seconds
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transition = 'opacity 300ms';
@@ -395,6 +871,12 @@ function getCurrentTime() {
     return now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatTime(timestamp) {
+    if (!timestamp) return getCurrentTime();
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
 function escapeHtml(text) {
     const map = {
         '&': '&amp;',
@@ -404,6 +886,12 @@ function escapeHtml(text) {
         "'": '&#039;',
     };
     return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+function formatNumber(num) {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toString();
 }
 
 function createRipple(element) {
@@ -431,7 +919,6 @@ function createRipple(element) {
 // ============================================
 
 function updateUI() {
-    // Update button states
     if (AppState.isMicOn) {
         Elements.micBtn.classList.add('active');
     } else {
@@ -446,77 +933,33 @@ function updateUI() {
 }
 
 // ============================================
-// ADVANCED FEATURES (Expandable)
+// DEBUG CONSOLE
 // ============================================
 
-// Simulate incoming messages
-function simulateIncomingMessage() {
-    const messages = [
-        'This is so interesting! 🎉',
-        'Great insights, thanks for sharing!',
-        'Can you elaborate on that?',
-        'Totally agree with you!',
-        'Looking forward to the next session 👍',
-    ];
-    
-    const users = [
-        { name: 'Alex Chen', img: 3 },
-        { name: 'Lisa Park', img: 7 },
-        { name: 'David Brown', img: 15 },
-        { name: 'Emma Stone', img: 20 },
-    ];
-    
-    const randomUser = users[Math.floor(Math.random() * users.length)];
-    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-    
-    if (AppState.chatOpen) {
-        const messageGroup = document.createElement('div');
-        messageGroup.className = 'message-group';
-        messageGroup.innerHTML = `
-            <div class="message-item">
-                <img src="https://i.pravatar.cc/150?img=${randomUser.img}" alt="${randomUser.name}" class="message-avatar">
-                <div class="message-content">
-                    <span class="message-author">${randomUser.name}</span>
-                    <p class="message-text">${randomMessage}</p>
-                    <span class="message-time">${getCurrentTime()}</span>
-                </div>
-            </div>
-        `;
-        
-        Elements.chatMessages.appendChild(messageGroup);
-        Elements.chatMessages.scrollTop = Elements.chatMessages.scrollHeight;
-    } else {
-        AppState.unreadMessages++;
-        updateChatBadge();
+function setupDebugConsole() {
+    // Uncomment the next line in development to show debug console
+    // Elements.debugConsole.style.display = 'block';
+}
+
+function toggleDebugConsole() {
+    Elements.debugConsole.style.display = 
+        Elements.debugConsole.style.display === 'none' ? 'block' : 'none';
+}
+
+// ============================================
+// CLEANUP ON PAGE UNLOAD
+// ============================================
+
+window.addEventListener('beforeunload', () => {
+    if (ws && ws.isConnected) {
+        ws.send('user:leave', {
+            username: ws.username,
+        });
+        ws.disconnect();
     }
-}
+});
 
-// Simulate hand raises
-function simulateHandRaise() {
-    const handRaises = Math.floor(Math.random() * 3) + 1;
-    AppState.handRaisedCount += handRaises;
-    Elements.handRaisedCount.textContent = AppState.handRaisedCount;
-    Elements.handRaisedIndicator.style.display = 'flex';
-    showToast(`${handRaises} new hand raise(s) request!`, 'info');
-}
-
-// Optional: Set up periodic events for demo
-function setupDemoEvents() {
-    // Simulate incoming messages every 5 seconds
-    setInterval(simulateIncomingMessage, 5000);
-    
-    // Simulate hand raises every 8 seconds
-    setInterval(simulateHandRaise, 8000);
-}
-
-// Uncomment to enable demo events
-// setupDemoEvents();
-
-// ============================================
-// ANIMATION SETUP
-// ============================================
-
-// Add ripple animation to CSS dynamically if not present
+// Add ripple animation to CSS if not already present
 const style = document.createElement('style');
 style.textContent = `
     @keyframes ripple {
@@ -528,4 +971,4 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-console.log('✅ Zain Live Voice Room UI initialized successfully!');
+console.log('✅ Zain Live Voice Room with WebSocket initialized successfully!');
