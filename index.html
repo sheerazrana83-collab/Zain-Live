@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zain Live - Audio Broadcasting & Social Chat</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Room Header -->
+        <header class="room-header">
+            <div class="header-left">
+                <button class="btn-icon" id="backBtn" title="Leave Room">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <div class="room-info">
+                    <h1 class="room-title">Tech Talk Room</h1>
+                    <span class="room-listeners">
+                        <i class="fas fa-headphones"></i>
+                        <span id="listenerCount">2.5K</span> Listening
+                    </span>
+                </div>
+            </div>
+            <button class="btn-icon" id="moreBtn" title="More Options">
+                <i class="fas fa-ellipsis-v"></i>
+            </button>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Animated Background -->
+            <div class="audio-waves">
+                <div class="wave"></div>
+                <div class="wave"></div>
+                <div class="wave"></div>
+            </div>
+
+            <!-- Speakers Section -->
+            <section class="speakers-section">
+                <h2 class="section-title">Speakers</h2>
+                <div class="speakers-grid">
+                    <!-- Speaker 1 -->
+                    <div class="speaker-card active">
+                        <div class="avatar-container">
+                            <img src="https://i.pravatar.cc/150?img=1" alt="Speaker 1" class="avatar speaking">
+                            <div class="status-badge speaker-badge">
+                                <i class="fas fa-microphone"></i>
+                            </div>
+                            <div class="speaking-indicator"></div>
+                        </div>
+                        <div class="speaker-info">
+                            <h3 class="speaker-name">Sarah Anderson</h3>
+                            <span class="speaker-role">Host</span>
+                        </div>
+                        <button class="btn-follow">Following</button>
+                    </div>
+
+                    <!-- Speaker 2 -->
+                    <div class="speaker-card active">
+                        <div class="avatar-container">
+                            <img src="https://i.pravatar.cc/150?img=5" alt="Speaker 2" class="avatar speaking">
+                            <div class="status-badge speaker-badge">
+                                <i class="fas fa-microphone"></i>
+                            </div>
+                            <div class="speaking-indicator"></div>
+                        </div>
+                        <div class="speaker-info">
+                            <h3 class="speaker-name">Marcus Johnson</h3>
+                            <span class="speaker-role">Speaker</span>
+                        </div>
+                        <button class="btn-follow">Follow</button>
+                    </div>
+
+                    <!-- Speaker 3 -->
+                    <div class="speaker-card">
+                        <div class="avatar-container">
+                            <img src="https://i.pravatar.cc/150?img=12" alt="Speaker 3" class="avatar">
+                            <div class="status-badge">
+                                <i class="fas fa-microphone-slash"></i>
+                            </div>
+                        </div>
+                        <div class="speaker-info">
+                            <h3 class="speaker-name">Emma Wilson</h3>
+                            <span class="speaker-role">Speaker</span>
+                        </div>
+                        <button class="btn-follow">Follow</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Listeners Section -->
+            <section class="listeners-section">
+                <div class="listeners-header">
+                    <h2 class="section-title">Listeners</h2>
+                    <span class="listener-badge">2,543</span>
+                </div>
+                <div class="listeners-grid" id="listenersGrid">
+                    <!-- Listener avatars will be dynamically added -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Chat Box Overlay -->
+        <div class="chat-overlay" id="chatOverlay">
+            <div class="chat-container">
+                <!-- Chat Header -->
+                <div class="chat-header">
+                    <h3>Room Chat</h3>
+                    <button class="btn-icon" id="closeChatBtn">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+
+                <!-- Chat Messages -->
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message-group">
+                        <div class="message-item">
+                            <img src="https://i.pravatar.cc/150?img=1" alt="User" class="message-avatar">
+                            <div class="message-content">
+                                <span class="message-author">Sarah Anderson</span>
+                                <p class="message-text">Great topic for today's discussion! 🎉</p>
+                                <span class="message-time">2:34 PM</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="message-group">
+                        <div class="message-item">
+                            <img src="https://i.pravatar.cc/150?img=5" alt="User" class="message-avatar">
+                            <div class="message-content">
+                                <span class="message-author">Marcus Johnson</span>
+                                <p class="message-text">Thanks for having me here! Looking forward to sharing insights.</p>
+                                <span class="message-time">2:35 PM</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="message-group">
+                        <div class="message-item">
+                            <img src="https://i.pravatar.cc/150?img=10" alt="User" class="message-avatar">
+                            <div class="message-content">
+                                <span class="message-author">James Lee</span>
+                                <p class="message-text">Amazing insights! 👏</p>
+                                <span class="message-time">2:37 PM</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="message-group">
+                        <div class="message-item">
+                            <img src="https://i.pravatar.cc/150?img=1" alt="User" class="message-avatar">
+                            <div class="message-content">
+                                <span class="message-author">Sarah Anderson</span>
+                                <p class="message-text">Let's dive deeper into the first topic</p>
+                                <span class="message-time">2:40 PM</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat-input-area">
+                    <input 
+                        type="text" 
+                        class="chat-input" 
+                        id="chatInput" 
+                        placeholder="Say something..."
+                        maxlength="500"
+                    >
+                    <button class="btn-send" id="sendChatBtn" title="Send Message">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gift/Emoji Popup -->
+        <div class="emoji-popup" id="emojiPopup">
+            <div class="emoji-content">
+                <h4>Send a Gift</h4>
+                <div class="emoji-grid">
+                    <button class="emoji-btn" data-emoji="💎" title="Diamond">💎</button>
+                    <button class="emoji-btn" data-emoji="🎁" title="Gift">🎁</button>
+                    <button class="emoji-btn" data-emoji="🌹" title="Rose">🌹</button>
+                    <button class="emoji-btn" data-emoji="⭐" title="Star">⭐</button>
+                    <button class="emoji-btn" data-emoji="🔥" title="Fire">🔥</button>
+                    <button class="emoji-btn" data-emoji="👑" title="Crown">👑</button>
+                    <button class="emoji-btn" data-emoji="💰" title="Money">💰</button>
+                    <button class="emoji-btn" data-emoji="✨" title="Sparkles">✨</button>
+                </div>
+                <button class="btn-close-emoji" id="closeEmojiBtn">Close</button>
+            </div>
+        </div>
+
+        <!-- Bottom Navigation Bar -->
+        <nav class="bottom-nav">
+            <div class="nav-content">
+                <!-- Left Controls -->
+                <div class="nav-group">
+                    <button class="nav-btn" id="micBtn" title="Microphone">
+                        <i class="fas fa-microphone"></i>
+                        <span class="tooltip">Mic (M)</span>
+                    </button>
+                </div>
+
+                <!-- Center Controls -->
+                <div class="nav-group center">
+                    <button class="nav-btn" id="handBtn" title="Raise Hand">
+                        <i class="fas fa-hand-paper"></i>
+                        <span class="tooltip">Raise Hand (H)</span>
+                    </button>
+                    <button class="nav-btn" id="chatBtn" title="Chat">
+                        <i class="fas fa-comments"></i>
+                        <span class="badge" id="chatBadge">3</span>
+                        <span class="tooltip">Chat (C)</span>
+                    </button>
+                    <button class="nav-btn" id="giftBtn" title="Send Gift">
+                        <i class="fas fa-gift"></i>
+                        <span class="tooltip">Gift (G)</span>
+                    </button>
+                </div>
+
+                <!-- Right Controls -->
+                <div class="nav-group">
+                    <button class="nav-btn leave" id="leaveBtn" title="Leave Room">
+                        <i class="fas fa-phone-slash"></i>
+                        <span class="tooltip">Leave</span>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Floating Action Indicators -->
+        <div class="floating-indicators">
+            <div class="indicator hand-raised" id="handRaisedIndicator" style="display: none;">
+                <i class="fas fa-hand-paper"></i>
+                <span id="handRaisedCount">0</span> Requests
+            </div>
+            <div class="indicator gift-received" id="giftIndicator" style="display: none;">
+                <span id="lastGift">💎</span>
+                <span id="giftCount">0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
